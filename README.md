@@ -1,3 +1,6 @@
+![GUI](https://github.com/user-attachments/assets/d8b157f5-5469-4aea-ad07-fbf388073d74)
+
+
 # SpecterScan (Scan‑Only, Passive)
 
 A PyQt5-based Wi‑Fi auditing GUI for **authorized** assessments. It uses `airmon-ng` to enable monitor mode and `Scapy` to passively sniff **beacons** and **probe responses**. No deauth, no cracking, no injection.
