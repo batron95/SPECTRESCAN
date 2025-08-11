@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# SpecterScan (scan-only, passive)
-# GUI: PyQt5
-# Sniffing: Scapy (beacons & probe responses)
-# Monitor mode control & channel set: airmon-ng, iw (Linux only)
+# SpecterScan (Scan-Only) — Dark Theme Edition
+# Passive Wi‑Fi auditor GUI (PyQt5 + Scapy). Linux only.
 #
 # Install:
 #   sudo apt update && sudo apt install -y aircrack-ng iw python3-pip
@@ -12,8 +10,6 @@
 #
 # Run:
 #   sudo python3 SpecterScan.py
-#
-# Legal: Authorized use only. Do not use on networks without explicit permission.
 #
 import sys
 import os
@@ -28,6 +24,8 @@ from typing import Dict, Optional, List, Tuple
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from scapy.all import sniff, Dot11, Dot11Beacon, Dot11ProbeResp, Dot11Elt, RadioTap
+
+APP_TITLE = "SPECTERSCAN — Passive Wi‑Fi Auditor"
 
 # --------------------------- Helpers & Models --------------------------- #
 
@@ -46,12 +44,10 @@ def run_cmd(cmd: List[str]) -> Tuple[int, str, str]:
         return 1, "", "Command timed out"
 
 def list_wireless_ifaces() -> List[str]:
-    # Prefer 'iw dev' for reliability
     code, out, _ = run_cmd(["iw", "dev"])
     if code == 0:
         ifaces = re.findall(r"Interface\s+([^\s]+)", out)
         return sorted(set(ifaces))
-    # Fallback (best effort) to airmon-ng output parsing
     code, out, _ = run_cmd(["airmon-ng"])
     if code == 0:
         m = re.findall(r"(?m)^(w[a-z0-9]+)", out)
@@ -59,7 +55,6 @@ def list_wireless_ifaces() -> List[str]:
     return []
 
 def guess_vendor_from_bssid(bssid: str) -> str:
-    # Tiny built-in OUI mapping (extend if needed)
     OUI = {
         "00:11:22": "Cisco",
         "00:17:9A": "Apple",
@@ -84,7 +79,7 @@ def elt_value(pkt, elt_id):
     return None
 
 def parse_channel(pkt) -> Optional[int]:
-    ds = elt_value(pkt, 3)  # DS Parameter Set
+    ds = elt_value(pkt, 3)
     if ds and len(ds) == 1:
         return ds[0]
     return None
@@ -164,7 +159,7 @@ class ChannelHopper(QtCore.QObject):
             ch = hop_list[i % len(hop_list)]
             run_cmd(["iw", "dev", self.iface, "set", "channel", str(ch)])
             i += 1
-            QtCore.QThread.msleep(180)  # ~5-6 hops/sec
+            QtCore.QThread.msleep(180)
         self.finished.emit()
 
 class Sniffer(QtCore.QThread):
@@ -210,7 +205,7 @@ class Sniffer(QtCore.QThread):
     def _handle(self, pkt):
         if not pkt.haslayer(Dot11):
             return
-        if pkt.type != 0 or pkt.subtype not in (8, 5):  # Beacon/ProbeResp
+        if pkt.type != 0 or pkt.subtype not in (8, 5):
             return
 
         bssid = pkt[Dot11].addr2
@@ -252,6 +247,77 @@ class Sniffer(QtCore.QThread):
 
 # --------------------------- GUI --------------------------- #
 
+DARK_QSS = """
+/* Root */
+QWidget {
+    background-color: #0b0b0d;
+    color: #e3e3e3;
+    font-family: 'Consolas', 'Fira Code', 'DejaVu Sans Mono', monospace;
+    font-size: 12px;
+}
+
+/* Banner */
+#Banner {
+    background-color: #1a0003;
+    border: 1px solid #990000;
+    padding: 10px;
+}
+
+#TitleLabel {
+    color: #ff2e2e;
+    font-size: 28px;
+    font-weight: 900;
+    letter-spacing: 1px;
+}
+
+#SubLabel {
+    color: #b35252;
+    font-size: 12px;
+}
+
+/* Controls */
+QComboBox, QLineEdit {
+    background-color: #121214;
+    border: 1px solid #552222;
+    padding: 6px;
+    selection-background-color: #ff2e2e;
+    selection-color: #000;
+}
+
+QPushButton {
+    background-color: rgba(255, 46, 46, 0.08);
+    border: 1px solid #7a1c1c;
+    padding: 6px 10px;
+    color: #ffb3b3;
+}
+QPushButton:hover {
+    background-color: rgba(255, 46, 46, 0.18);
+}
+QPushButton:pressed {
+    background-color: rgba(255, 46, 46, 0.28);
+}
+QPushButton[destructive=\"true\"] {
+    color: #ffdada;
+    border: 1px solid #b30000;
+}
+
+/* Table */
+QHeaderView::section {
+    background-color: #1a0c0c;
+    color: #ffbcbc;
+    border: 1px solid #552222;
+    padding: 6px;
+    font-weight: 700;
+}
+QTableView {
+    gridline-color: #331111;
+    alternate-background-color: #101012;
+    selection-background-color: #7a1c1c;
+    selection-color: #fff;
+    border: 1px solid #331111;
+}
+"""
+
 class APTableModel(QtCore.QAbstractTableModel):
     HEADERS = ["SSID", "BSSID", "Ch", "Enc", "RSSI", "Vendor", "First Seen", "Last Seen", "Beacons"]
 
@@ -273,7 +339,7 @@ class APTableModel(QtCore.QAbstractTableModel):
             return QtCore.Qt.AlignCenter
         if role == QtCore.Qt.ForegroundRole and index.column() == 3:
             if rec.encryption.startswith("OPEN"):
-                return QtGui.QBrush(QtGui.QColor("#b34700"))
+                return QtGui.QBrush(QtGui.QColor("#ff6b57"))
         return None
 
     def headerData(self, section, orientation, role=QtCore.Qt.DisplayRole):
@@ -295,23 +361,40 @@ class APTableModel(QtCore.QAbstractTableModel):
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("SpecterScan (Scan‑Only)")
-        self.setMinimumSize(1000, 580)
+        self.setWindowTitle(APP_TITLE)
+        self.setMinimumSize(1100, 620)
+        self.setStyleSheet(DARK_QSS)
 
         self.sniffer: Optional[Sniffer] = None
         self.monitor_iface_name = None
 
+        # Banner
+        self.banner = QtWidgets.QWidget(objectName="Banner")
+        title = QtWidgets.QLabel("BLOOD‑RED SPECTERSCAN", objectName="TitleLabel")
+        subtitle = QtWidgets.QLabel("Passive Wi‑Fi Recon Dashboard — Authorized Use Only", objectName="SubLabel")
+        b_lay = QtWidgets.QVBoxLayout(self.banner)
+        b_lay.addWidget(title)
+        b_lay.addWidget(subtitle)
+
+        # Controls
         self.iface_combo = QtWidgets.QComboBox()
         self.refresh_ifaces_btn = QtWidgets.QPushButton("Refresh")
         self.toggle_monitor_btn = QtWidgets.QPushButton("Enable Monitor")
+        self.toggle_monitor_btn.setProperty("destructive", True)
         self.start_btn = QtWidgets.QPushButton("Start")
-        self.stop_btn = QtWidgets.QPushButton("Stop")
-        self.stop_btn.setEnabled(False)
-        self.filter_edit = QtWidgets.QLineEdit()
-        self.filter_edit.setPlaceholderText("Filter SSID/BSSID...")
+        self.stop_btn = QtWidgets.QPushButton("Stop"); self.stop_btn.setEnabled(False)
+        self.filter_edit = QtWidgets.QLineEdit(); self.filter_edit.setPlaceholderText("Filter SSID/BSSID…")
         self.export_btn = QtWidgets.QPushButton("Export CSV")
 
-        self.model = APTableModel(None)  # placeholder; replaced on start
+        top = QtWidgets.QHBoxLayout()
+        for w in (QtWidgets.QLabel("Interface:"), self.iface_combo, self.refresh_ifaces_btn,
+                  self.toggle_monitor_btn, self.start_btn, self.stop_btn,
+                  self.filter_edit, self.export_btn):
+            top.addWidget(w)
+        top.setSpacing(10)
+
+        # Table
+        self.model = APTableModel(None)
         self.table = QtWidgets.QTableView()
         self.table.setModel(self.model)
         self.table.setSortingEnabled(False)
@@ -319,25 +402,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.table.setSelectionBehavior(QtWidgets.QTableView.SelectRows)
         self.table.setAlternatingRowColors(True)
 
-        top = QtWidgets.QHBoxLayout()
-        top.addWidget(QtWidgets.QLabel("Interface:"))
-        top.addWidget(self.iface_combo)
-        top.addWidget(self.refresh_ifaces_btn)
-        top.addSpacing(12)
-        top.addWidget(self.toggle_monitor_btn)
-        top.addSpacing(12)
-        top.addWidget(self.start_btn)
-        top.addWidget(self.stop_btn)
-        top.addStretch(1)
-        top.addWidget(self.filter_edit)
-        top.addWidget(self.export_btn)
-
         central = QtWidgets.QWidget()
         v = QtWidgets.QVBoxLayout(central)
+        v.addWidget(self.banner)
         v.addLayout(top)
         v.addWidget(self.table)
         self.setCentralWidget(central)
 
+        # Signals
         self.refresh_ifaces_btn.clicked.connect(self.load_ifaces)
         self.toggle_monitor_btn.clicked.connect(self.toggle_monitor_mode)
         self.start_btn.clicked.connect(self.start_sniff)
@@ -347,6 +419,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.load_ifaces()
 
+    # ---------------- Interface & Monitor Mode ---------------- #
     def load_ifaces(self):
         self.iface_combo.clear()
         ifaces = list_wireless_ifaces()
@@ -363,10 +436,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self.monitor_iface_name:
             code, out, err = run_cmd(["airmon-ng", "start", iface])
             mon = re.search(r"monitor mode vif enabled.*\[(.+?)\]", out + "\n" + err, re.IGNORECASE)
-            if mon:
-                self.monitor_iface_name = mon.group(1)
-            else:
-                self.monitor_iface_name = iface + "mon"
+            self.monitor_iface_name = mon.group(1) if mon else iface + "mon"
             QtWidgets.QMessageBox.information(self, "Monitor Mode",
                                               f"Tried enabling monitor mode.\nstdout:\n{out}\n\nstderr:\n{err}")
             self.toggle_monitor_btn.setText("Disable Monitor")
@@ -381,6 +451,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.monitor_iface_name = None
             self.load_ifaces()
 
+    # ---------------- Sniff Control ---------------- #
     def start_sniff(self):
         iface = self.iface_combo.currentText()
         if not iface:
@@ -411,7 +482,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self.sniffer:
             QtWidgets.QMessageBox.warning(self, "No data", "Start a scan first.")
             return
-        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export CSV", "wifi_scan.csv",
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export CSV", "specterscan.csv",
                                                         "CSV Files (*.csv)")
         if not path:
             return
